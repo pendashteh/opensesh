@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cowork.timer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #2a2a2a;
+    --green: #00ff88;
+    --green-dim: #00cc6a;
+    --green-mute: rgba(0,255,136,0.08);
+    --red: #ff4455;
+    --amber: #ffaa00;
+    --text: #e8e8e8;
+    --muted: #555;
+    --dim: #333;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    text-transform: lowercase;
+  }
+
+  .logo span { color: var(--muted); }
+
+  .header-info {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+
+  .pulse-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    display: inline-block;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(0,255,136,0); }
+  }
+
+  main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* LEFT SIDEBAR: session list */
+  .sidebar {
+    width: 280px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 20px 20px 12px;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .sessions-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .session-item {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+  }
+
+  .session-item:hover { background: var(--surface); }
+
+  .session-item.active {
+    background: var(--green-mute);
+    border-left: 2px solid var(--green);
+  }
+
+  .session-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .session-item.active .session-name { color: var(--green); }
+
+  .session-meta {
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    gap: 10px;
+  }
+
+  .session-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border: 1px solid var(--dim);
+    border-radius: 2px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .session-item.active .session-badge {
+    border-color: var(--green-dim);
+    color: var(--green-dim);
+  }
+
+  .btn-new {
+    margin: 16px;
+    padding: 10px;
+    background: transparent;
+    border: 1px dashed var(--dim);
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+
+  .btn-new:hover {
+    border-color: var(--green-dim);
+    color: var(--green-dim);
+    background: var(--green-mute);
+  }
+
+  /* MAIN TIMER AREA */
+  .timer-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    position: relative;
+  }
+
+  .phase-label {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .phase-label.work { color: var(--green-dim); }
+  .phase-label.rest { color: var(--amber); }
+
+  .timer-ring {
+    position: relative;
+    margin-bottom: 40px;
+  }
+
+  .timer-svg {
+    transform: rotate(-90deg);
+  }
+
+  .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 3;
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke: var(--green);
+    stroke-width: 3;
+    stroke-linecap: butt;
+    transition: stroke-dashoffset 1s linear, stroke 0.5s;
+  }
+
+  .ring-progress.rest { stroke: var(--amber); }
+
+  .timer-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .timer-display {
+    font-family: 'Space Mono', monospace;
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    color: var(--text);
+    line-height: 1;
+    transition: color 0.5s;
+  }
+
+  .timer-display.rest { color: var(--amber); }
+
+  .cycle-info {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 6px;
+    letter-spacing: 0.1em;
+  }
+
+  .timer-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 48px;
+  }
+
+  .btn {
+    padding: 10px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    border: 1px solid;
+    transition: all 0.15s;
+    text-transform: lowercase;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    border-color: var(--green);
+    color: #000;
+  }
+
+  .btn-primary:hover { background: var(--green-dim); border-color: var(--green-dim); }
+  .btn-primary:disabled { opacity: 0.3; cursor: default; }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: var(--dim);
+    color: var(--muted);
+  }
+
+  .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+
+  /* Share code */
+  .share-section {
+    text-align: center;
+    max-width: 420px;
+  }
+
+  .share-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .share-code {
+    font-size: 11px;
+    color: var(--green);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 16px;
+    cursor: pointer;
+    position: relative;
+    word-break: break-all;
+    text-align: left;
+    transition: border-color 0.15s;
+    line-height: 1.6;
+  }
+
+  .share-code:hover { border-color: var(--green-dim); }
+
+  .share-hint {
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Cycle dots */
+  .cycle-dots {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 32px;
+  }
+
+  .cycle-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: background 0.3s;
+  }
+
+  .cycle-dot.done { background: var(--green-dim); }
+  .cycle-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 32px;
+    width: 480px;
+    max-width: 90vw;
+    transform: translateY(8px);
+    transition: transform 0.2s;
+  }
+
+  .modal-overlay.open .modal { transform: translateY(0); }
+
+  .modal-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    text-transform: lowercase;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .modal-close:hover { color: var(--text); }
+
+  .form-row {
+    margin-bottom: 16px;
+  }
+
+  .form-label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .form-input:focus { border-color: var(--green-dim); }
+
+  .form-row-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .form-hint {
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 4px;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    justify-content: flex-end;
+  }
+
+  /* Import section */
+  .import-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+  }
+
+  .import-divider::before,
+  .import-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* flash on copy */
+  @keyframes flashGreen {
+    0% { border-color: var(--green); color: var(--green); }
+    100% { border-color: var(--border); }
+  }
+
+  .copied { animation: flashGreen 0.8s ease-out; }
+
+  /* bottom bar */
+  .bottom-bar {
+    border-top: 1px solid var(--border);
+    padding: 10px 32px;
+    font-size: 10px;
+    color: var(--dim);
+    display: flex;
+    gap: 24px;
+    letter-spacing: 0.05em;
+  }
+
+  .bottom-bar span { color: var(--muted); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--dim); }
+
+  /* notification */
+  .notif {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    background: var(--surface);
+    border: 1px solid var(--green-dim);
+    color: var(--green);
+    font-size: 12px;
+    padding: 12px 20px;
+    transform: translateY(10px);
+    opacity: 0;
+    transition: all 0.3s;
+    pointer-events: none;
+    z-index: 200;
+  }
+
+  .notif.show { transform: translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">cowork<span>.</span>timer</div>
+  <div class="header-info">
+    <span><span class="pulse-dot"></span> live</span>
+    <span id="wall-clock">--:--:--</span>
+  </div>
+</header>
+
+<main>
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>sessions</span>
+      <span id="session-count">0</span>
+    </div>
+    <div class="sessions-list" id="sessions-list"></div>
+    <button class="btn-new" onclick="openNewModal()">+ new session</button>
+  </div>
+
+  <div class="timer-area">
+    <div class="phase-label" id="phase-label">WORK</div>
+
+    <div class="timer-ring">
+      <svg class="timer-svg" width="260" height="260" viewBox="0 0 260 260">
+        <circle class="ring-bg" cx="130" cy="130" r="120"/>
+        <circle class="ring-progress" id="ring-progress" cx="130" cy="130" r="120"
+          stroke-dasharray="753.98"
+          stroke-dashoffset="0"/>
+      </svg>
+      <div class="timer-inner">
+        <div class="timer-display" id="timer-display">25:00</div>
+        <div class="cycle-info" id="cycle-info">cycle 1</div>
+      </div>
+    </div>
+
+    <div class="cycle-dots" id="cycle-dots"></div>
+
+    <div class="timer-controls">
+      <button class="btn btn-ghost" onclick="resetTimer()" id="btn-reset">reset</button>
+      <button class="btn btn-primary" onclick="toggleTimer()" id="btn-toggle">start</button>
+      <button class="btn btn-ghost" onclick="skipPhase()">skip</button>
+    </div>
+
+    <div class="share-section">
+      <div class="share-label">session code — share to sync</div>
+      <div class="share-code" id="share-code" onclick="copyCode()" title="click to copy"></div>
+      <div class="share-hint">anyone who pastes this code gets the same timer ↑ click to copy</div>
+    </div>
+  </div>
+</main>
+
+<div class="bottom-bar">
+  <span>session: <span id="footer-session">global</span></span>
+  <span>work: <span id="footer-work">25m</span></span>
+  <span>break: <span id="footer-break">5m</span></span>
+  <span>started: <span id="footer-start">--:--</span></span>
+</div>
+
+<!-- New Session Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">
+      new session
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">session name</label>
+      <input class="form-input" id="inp-name" type="text" placeholder="e.g. backend sprint, docs day...">
+    </div>
+
+    <div class="form-row-group">
+      <div>
+        <label class="form-label">start time</label>
+        <input class="form-input" id="inp-start" type="time">
+        <div class="form-hint">HH:MM — anchors the cycle</div>
+      </div>
+      <div>
+        <label class="form-label">work duration (min)</label>
+        <input class="form-input" id="inp-work" type="number" value="25" min="1" max="120">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">break duration (min)</label>
+      <input class="form-input" id="inp-break" type="number" value="5" min="1" max="60">
+    </div>
+
+    <div class="import-divider">or import a code</div>
+
+    <div class="form-row">
+      <label class="form-label">paste session code</label>
+      <input class="form-input" id="inp-import" type="text" placeholder="cowork:...">
+      <div class="form-hint">paste a code from a teammate to join their session</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">cancel</button>
+      <button class="btn btn-primary" onclick="createSession()">create</button>
+    </div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script>
+// ─── Session Model ──────────────────────────────────────────────
+// A session is defined by: name, startTime (HH:MM), workMin, breakMin
+// The session code encodes these parameters so anyone with the code
+// gets the exact same timer state (synchronized to wall clock).
+
+const CIRCUMFERENCE = 2 * Math.PI * 120; // ~753.98
+
+let sessions = [];
+let activeIdx = 0;
+let tickInterval = null;
+let running = false;
+
+// ─── Build global (Pomodoro) session ────────────────────────────
+function globalSession() {
+  // Global session starts at midnight (00:00) so cycles are wall-clock aligned
+  return {
+    name: 'global · pomodoro',
+    startTime: '00:00',
+    workMin: 25,
+    breakMin: 5,
+    isGlobal: true
+  };
+}
+
+function encodeSession(s) {
+  // Format: cowork:NAME:STARTTIME:WORK:BREAK
+  const parts = [
+    'cowork',
+    encodeURIComponent(s.name),
+    s.startTime,
+    s.workMin,
+    s.breakMin
+  ];
+  return parts.join(':');
+}
+
+function decodeSession(code) {
+  try {
+    const parts = code.trim().split(':');
+    // cowork:NAME:HH:MM:WORK:BREAK  (time has a colon in it)
+    if (parts[0] !== 'cowork') return null;
+    const name = decodeURIComponent(parts[1]);
+    const startTime = parts[2] + ':' + parts[3];
+    const workMin = parseInt(parts[4]);
+    const breakMin = parseInt(parts[5]);
+    if (!name || isNaN(workMin) || isNaN(breakMin)) return null;
+    return { name, startTime, workMin, breakMin };
+  } catch(e) { return null; }
+}
+
+// ─── Timer Calculation ──────────────────────────────────────────
+function getTimerState(session) {
+  const now = new Date();
+  const [sh, sm] = session.startTime.split(':').map(Number);
+
+  // Anchor: today at startTime
+  let anchor = new Date(now);
+  anchor.setHours(sh, sm, 0, 0);
+
+  // If anchor is in the future, use yesterday's anchor
+  if (anchor > now) {
+    anchor.setDate(anchor.getDate() - 1);
+  }
+
+  const elapsedSec = Math.floor((now - anchor) / 1000);
+  const cycleSec = (session.workMin + session.breakMin) * 60;
+  const posInCycle = elapsedSec % cycleSec;
+  const cycleNum = Math.floor(elapsedSec / cycleSec) + 1;
+
+  let phase, remaining;
+  if (posInCycle < session.workMin * 60) {
+    phase = 'work';
+    remaining = session.workMin * 60 - posInCycle;
+  } else {
+    phase = 'rest';
+    remaining = cycleSec - posInCycle;
+  }
+
+  const phaseDuration = phase === 'work' ? session.workMin * 60 : session.breakMin * 60;
+  const elapsed = phaseDuration - remaining;
+  const progress = elapsed / phaseDuration;
+
+  return { phase, remaining, cycleNum, progress };
+}
+
+// ─── UI Update ──────────────────────────────────────────────────
+let lastPhase = null;
+
+function renderTimer() {
+  const s = sessions[activeIdx];
+  if (!s) return;
+
+  const { phase, remaining, cycleNum, progress } = getTimerState(s);
+
+  // Time display
+  const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+  const sec = String(remaining % 60).padStart(2, '0');
+  document.getElementById('timer-display').textContent = `${m}:${sec}`;
+  document.getElementById('timer-display').className = `timer-display ${phase}`;
+
+  // Phase label
+  const pl = document.getElementById('phase-label');
+  pl.textContent = phase === 'work' ? '▶ WORK' : '☕ BREAK';
+  pl.className = `phase-label ${phase}`;
+
+  // Cycle info
+  document.getElementById('cycle-info').textContent = `cycle ${cycleNum}`;
+
+  // Ring
+  const ring = document.getElementById('ring-progress');
+  const offset = CIRCUMFERENCE * (1 - progress);
+  ring.style.strokeDashoffset = offset;
+  ring.className = `ring-progress ${phase === 'rest' ? 'rest' : ''}`;
+
+  // Phase change notification
+  if (lastPhase && lastPhase !== phase) {
+    showNotif(phase === 'work' ? '▶ work time!' : '☕ break time!');
+    document.title = phase === 'work' ? '▶ cowork.timer' : '☕ BREAK · cowork.timer';
+  }
+  lastPhase = phase;
+
+  // Cycle dots (show last 4)
+  const dots = document.getElementById('cycle-dots');
+  const dotCount = Math.min(cycleNum + 1, 8);
+  dots.innerHTML = Array.from({length: dotCount}, (_, i) => {
+    let cls = 'cycle-dot';
+    if (i < cycleNum - 1) cls += ' done';
+    else if (i === cycleNum - 1) cls += ' active';
+    return `<div class="${cls}"></div>`;
+  }).join('');
+}
+
+function renderSidebar() {
+  const list = document.getElementById('sessions-list');
+  list.innerHTML = sessions.map((s, i) => {
+    const { phase, remaining } = getTimerState(s);
+    const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const sec = String(remaining % 60).padStart(2, '0');
+    return `
+      <div class="session-item ${i === activeIdx ? 'active' : ''}" onclick="switchSession(${i})">
+        <div class="session-name">${s.name}</div>
+        <div class="session-meta">
+          <span>${m}:${sec}</span>
+          <span class="session-badge">${phase}</span>
+          <span>${s.workMin}m / ${s.breakMin}m</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('session-count').textContent = sessions.length;
+}
+
+function renderShare() {
+  const s = sessions[activeIdx];
+  if (!s) return;
+  const code = encodeSession(s);
+  document.getElementById('share-code').textContent = code;
+}
+
+function renderFooter() {
+  const s = sessions[activeIdx];
+  if (!s) return;
+  document.getElementById('footer-session').textContent = s.name;
+  document.getElementById('footer-work').textContent = s.workMin + 'm';
+  document.getElementById('footer-break').textContent = s.breakMin + 'm';
+  document.getElementById('footer-start').textContent = s.startTime;
+}
+
+function renderAll() {
+  renderTimer();
+  renderSidebar();
+  renderShare();
+  renderFooter();
+}
+
+// ─── Clock & Tick ───────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('wall-clock').textContent =
+    now.toLocaleTimeString('en-GB', {hour12: false});
+}
+
+function tick() {
+  updateClock();
+  renderAll();
+}
+
+// ─── Controls ───────────────────────────────────────────────────
+// Since timers are wall-clock based, "running" just means we're ticking.
+// Start/stop only affects the tick loop (visual). The timer itself is always
+// derived from real time — this ensures sync with teammates.
+
+function toggleTimer() {
+  running = !running;
+  const btn = document.getElementById('btn-toggle');
+  if (running) {
+    btn.textContent = 'pause';
+    tickInterval = setInterval(tick, 1000);
+  } else {
+    btn.textContent = 'start';
+    clearInterval(tickInterval);
+  }
+}
+
+function resetTimer() {
+  // For wall-clock sessions, "reset" means we restart the local view.
+  // The timer is still in sync if you start again.
+  if (running) {
+    running = false;
+    clearInterval(tickInterval);
+    document.getElementById('btn-toggle').textContent = 'start';
+  }
+  renderAll();
+}
+
+function skipPhase() {
+  // Skip by advancing the start time to force the next phase
+  // Not applicable for wall-clock sessions — just show a hint
+  showNotif('⚠ wall-clock sessions are always in sync — skip is local only');
+}
+
+function switchSession(idx) {
+  activeIdx = idx;
+  lastPhase = null;
+  renderAll();
+}
+
+// ─── Session Management ─────────────────────────────────────────
+function openNewModal() {
+  // Default start time = now
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('inp-start').value = `${hh}:${mm}`;
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-work').value = '25';
+  document.getElementById('inp-break').value = '5';
+  document.getElementById('inp-import').value = '';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function createSession() {
+  // Check import field first
+  const importCode = document.getElementById('inp-import').value.trim();
+  if (importCode) {
+    const parsed = decodeSession(importCode);
+    if (!parsed) { showNotif('⚠ invalid session code'); return; }
+    sessions.push(parsed);
+    activeIdx = sessions.length - 1;
+    lastPhase = null;
+    closeModal();
+    renderAll();
+    showNotif(`✓ joined session: ${parsed.name}`);
+    return;
+  }
+
+  const name = document.getElementById('inp-name').value.trim() || 'unnamed';
+  const startTime = document.getElementById('inp-start').value || '09:00';
+  const workMin = parseInt(document.getElementById('inp-work').value) || 25;
+  const breakMin = parseInt(document.getElementById('inp-break').value) || 5;
+
+  sessions.push({ name, startTime, workMin, breakMin });
+  activeIdx = sessions.length - 1;
+  lastPhase = null;
+  closeModal();
+  renderAll();
+  showNotif(`✓ created session: ${name}`);
+}
+
+// ─── Copy Code ──────────────────────────────────────────────────
+function copyCode() {
+  const code = document.getElementById('share-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    document.getElementById('share-code').classList.remove('copied');
+    void document.getElementById('share-code').offsetWidth; // reflow
+    document.getElementById('share-code').classList.add('copied');
+    showNotif('✓ code copied to clipboard');
+  });
+}
+
+// ─── Notification ───────────────────────────────────────────────
+let notifTimeout;
+function showNotif(msg) {
+  const el = document.getElementById('notif');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(notifTimeout);
+  notifTimeout = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ─── Close modal on overlay click ───────────────────────────────
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ─── Init ───────────────────────────────────────────────────────
+sessions.push(globalSession());
+activeIdx = 0;
+renderAll();
+
+// Check URL hash for auto-import
+if (window.location.hash) {
+  const code = decodeURIComponent(window.location.hash.slice(1));
+  const parsed = decodeSession(code);
+  if (parsed) {
+    sessions.push(parsed);
+    activeIdx = sessions.length - 1;
+    showNotif(`✓ joined session: ${parsed.name}`);
+    renderAll();
+  }
+}
+
+// Auto-start ticking
+running = true;
+document.getElementById('btn-toggle').textContent = 'pause';
+tickInterval = setInterval(tick, 1000);
+updateClock();
+</script>
+</body>
+</html>
