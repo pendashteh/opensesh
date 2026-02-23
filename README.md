@@ -65,6 +65,11 @@ open cowork.html
 python3 -m http.server  # then visit http://localhost:8000/cowork.html
 ```
 
+### Progressive Web App support
+
+The app is now installable as a standalone web application. When you open it over `http(s)` in a modern browser you can choose **"Install"** from the browser menu or click the **install** button that appears in the header. This registers a service worker and a web manifest (`manifest.json`), allowing you to launch the timer separately from your normal browser tabs like a native app. Make sure to host the files (for example via `python3 -m http.server` or GitHub Pages) so that the service worker can be registered.
+
+
 ### Hosting (optional)
 
 Since it's a single file, you can host it anywhere static — GitHub Pages, Netlify, an S3 bucket, or even as a browser bookmark.

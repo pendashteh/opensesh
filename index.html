@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>cowork.timer</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0a0a">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -519,6 +521,8 @@
   <div class="header-info">
     <span><span class="pulse-dot"></span> live</span>
     <span id="wall-clock">--:--:--</span>
+    <!-- install button will be shown when PWA install prompt is available -->
+    <button id="btn-install" class="btn btn-ghost" style="display:none" onclick="promptInstall()">install</button>
   </div>
 </header>
 
@@ -940,6 +944,30 @@ running = true;
 document.getElementById('btn-toggle').textContent = 'pause';
 tickInterval = setInterval(tick, 1000);
 updateClock();
+
+// ─── Progressive Web App helpers ─────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(() => console.log('service worker registered'))
+    .catch(console.error);
+}
+
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent automatic prompt and save event for later
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('btn-install').style.display = 'inline-block';
+});
+
+function promptInstall() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then((choice) => {
+    deferredPrompt = null;
+    document.getElementById('btn-install').style.display = 'none';
+  });
+}
 </script>
 </body>
 </html>
