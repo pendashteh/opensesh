@@ -2,6 +2,8 @@
 
 A minimal, self-contained coworking Pomodoro timer for developers. No server, no account, no dependencies — just a single HTML file you can drop in a git repo and share with your team.
 
+![Screenshot](Screenshot.png)
+
 ---
 
 ## How it works
